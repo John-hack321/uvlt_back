@@ -61,12 +61,7 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-class PasswordReset(BaseModel):
-    email: EmailStr
-
-class ResetPassword(BaseModel):
-    token: str
-    new_password: str
+# Password reset models removed
 
 # Helper functions
 def verify_password(plain_password, hashed_password):
@@ -182,73 +177,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/forgot-password")
-async def forgot_password(password_reset: PasswordReset):
-    # Check if user exists
-    response = supabase.table("users").select("*").eq("email", password_reset.email).execute()
-    if len(response.data) == 0:
-        # Don't reveal if email exists or not for security reasons
-        return {"message": "If your email is registered, you will receive a password reset link"}
-    
-    # Generate reset token
-    reset_token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(64))
-    expiry = (datetime.utcnow() + timedelta(hours=1)).isoformat()
-    
-    # Store token in database
-    try:
-        # First delete any existing reset tokens for this user
-        supabase.table("password_resets").delete().eq("email", password_reset.email).execute()
-        
-        # Then insert new token
-        supabase.table("password_resets").insert({
-            "email": password_reset.email,
-            "token": reset_token,
-            "expires_at": expiry
-        }).execute()
-        
-        # In a real app, you would send an email with the reset link
-        # For now, just return the token
-        return {"message": "Password reset link sent", "token": reset_token}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process password reset: {str(e)}"
-        )
-
-@app.post("/reset-password")
-async def reset_password(reset_data: ResetPassword):
-    # Validate token
-    response = supabase.table("password_resets").select("*").eq("token", reset_data.token).execute()
-    if len(response.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired token"
-        )
-    
-    reset_info = response.data[0]
-    if datetime.fromisoformat(reset_info["expires_at"]) < datetime.utcnow():
-        # Delete expired token
-        supabase.table("password_resets").delete().eq("token", reset_data.token).execute()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token expired"
-        )
-    
-    # Update user password
-    try:
-        hashed_password = get_password_hash(reset_data.new_password)
-        supabase.table("users").update({"password": hashed_password}).eq("email", reset_info["email"]).execute()
-        
-        # Delete used token
-        supabase.table("password_resets").delete().eq("token", reset_data.token).execute()
-        
-        return {"message": "Password reset successfully"}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reset password: {str(e)}"
-        )
 
 @app.get("/me", status_code=status.HTTP_200_OK)
 async def read_users_me(current_user = Depends(get_current_user)):
