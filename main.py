@@ -11,7 +11,7 @@ from supabase import create_client
 import uuid
 import secrets
 import string
-from passlib.context import CryptContext
+import bcrypt
 
 # Load environment variables
 load_dotenv()
@@ -34,7 +34,7 @@ supabase_key = os.getenv("SUPABASE_KEY")
 supabase = create_client(supabase_url, supabase_key)
 
 # Configure password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Using bcrypt directly for password hashing
 
 # Configure JWT
 SECRET_KEY = os.getenv("SECRET_KEY", "YOUR_SECRET_KEY")  # Use a strong secret key in production
@@ -70,10 +70,11 @@ class ResetPassword(BaseModel):
 
 # Helper functions
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    return hashed.decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
